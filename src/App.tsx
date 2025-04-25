@@ -10,8 +10,8 @@ interface Pet {
   owner: string;
   imageUrl?: string;
   favoriteFood?: string;
-  birthday: string;
-  fed: boolean;
+  dateCreated: Date;
+  fed?: boolean;
 }
 
 function App() {
@@ -23,19 +23,27 @@ function App() {
     owner: '',
     imageUrl: '',
     favoriteFood: '',
-    birthday: '',
   });
   const [adding, setAdding] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const apiUrl = 'https://c07e-2603-8000-ca01-ada4-60c4-674b-9116-79d5.ngrok-free.app/pets';
 
-  useEffect(() => {
+  // Helper to fetch pets
+  const fetchPets = async () => {
     setLoading(true);
-    axios.get(apiUrl)
-      .then(res => setPets(res.data))
-      .catch(() => setPets([]))
-      .finally(() => setLoading(false));
+    try {
+      const res = await axios.get(apiUrl, { headers: { 'ngrok-skip-browser-warning': 'true' } });
+      setPets(res.data);
+    } catch {
+      setPets([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPets();
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,7 +53,7 @@ function App() {
   const handleDialogOpen = () => setDialogOpen(true);
   const handleDialogClose = () => {
     setDialogOpen(false);
-    setNewPet({ petName: '', owner: '', imageUrl: '', favoriteFood: '', birthday: '' });
+    setNewPet({ petName: '', owner: '', imageUrl: '', favoriteFood: '' });
   };
 
   const handleAddPet = async (e: React.FormEvent) => {
@@ -63,16 +71,27 @@ function App() {
     }
   };
 
-  const handleToggleFed = (id: number) => {
+  const handleToggleFed = async (id: number) => {
     setPets(prevPets => prevPets.map((pet) =>
       pet.id === id ? { ...pet, fed: !pet.fed } : pet
     ));
-    // Optionally, send update to server here
+    const toggledPet = pets.find((pet) => pet.id === id);
+    if (toggledPet) {
+      try {
+        await axios.patch(`${apiUrl}/${id}`, { fed: !toggledPet.fed });
+      } catch {
+        // Optionally handle error (e.g., revert UI change or show a message)
+      }
+    }
   };
 
-  const handleRemove = (id: number) => {
-    setPets(prevPets => prevPets.filter((pet) => pet.id !== id));
-    // Optionally, send delete to server here
+  const handleRemove = async (id: number) => {
+    try {
+      await axios.delete(`${apiUrl}/${id}`);
+      await fetchPets(); // Refresh the table after deletion
+    } catch {
+      // Optionally handle error (e.g., show a message)
+    }
   };
 
   // Download pets as JSON
@@ -111,8 +130,8 @@ function App() {
       field: 'age',
       headerName: 'Age (hours)',
       flex: 1,
-      valueGetter: (params) => {
-        const birthday = (params as any).row.birthday;
+      renderCell: (params) => {
+        const birthday = params.value;
         if (!birthday) return '-';
         const birth = new Date(birthday);
         const now = new Date();
@@ -211,16 +230,6 @@ function App() {
                 value={newPet.favoriteFood}
                 onChange={handleInputChange}
                 size="small"
-              />
-              <TextField
-                label="Birthday"
-                name="birthday"
-                value={newPet.birthday}
-                onChange={handleInputChange}
-                size="small"
-                type="date"
-                InputLabelProps={{ shrink: true }}
-                required
               />
             </DialogContent>
             <DialogActions sx={{ color: '#000' }}>
